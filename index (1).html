@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Stromprotokoll</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%231B1F24'/%3E%3Cpolygon points='55,15 25,55 48,55 42,85 75,42 52,42' fill='%23C97C3D'/%3E%3C/svg%3E" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="theme-color" content="#1B1F24" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  :root {
+    --ink: #1B1F24;
+    --ink-panel: #242931;
+    --ink-panel-2: #2E343D;
+    --copper: #C97C3D;
+    --copper-dim: #8C5A2E;
+    --verdigris: #5B9C86;
+    --paper: #EDEAE2;
+    --ash: #9AA1AA;
+    --line: rgba(237,234,226,0.10);
+    --warn: #C0563F;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--ink); }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  .app {
+    background: var(--ink);
+    color: var(--paper);
+    min-height: 100vh;
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 18px 16px 40px;
+  }
+  .app-center { display: flex; align-items: center; justify-content: center; min-height: 100vh; text-align: center; }
+  .loading { display: flex; align-items: center; gap: 8px; color: var(--ash); font-size: 14px; }
+  .mono { font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace; font-variant-numeric: tabular-nums; }
+
+  .setup-box { max-width: 340px; padding: 24px; }
+  .setup-box h1 { font-size: 17px; margin: 12px 0 8px; }
+  .setup-box p { color: var(--ash); font-size: 13.5px; line-height: 1.5; }
+  .setup-box code { background: var(--ink-panel); padding: 2px 6px; border-radius: 5px; font-size: 12px; }
+
+  .header { margin-bottom: 18px; }
+  .header-top { display: flex; align-items: center; justify-content: space-between; }
+  .header-title { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+  .header-sub { color: var(--ash); font-size: 12.5px; margin-top: 4px; padding-left: 1px; }
+
+  .icon-btn {
+    background: var(--ink-panel);
+    border: 1px solid var(--line);
+    color: var(--paper);
+    width: 34px; height: 34px;
+    border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .icon-btn:active { background: var(--ink-panel-2); }
+  .icon-btn-sm { width: 28px; height: 28px; border-radius: 7px; background: transparent; border: none; color: var(--ash); }
+
+  .panel {
+    background: var(--ink-panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  .panel-head {
+    font-size: 12.5px;
+    color: var(--ash);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .divider { height: 1px; background: var(--line); margin: 10px 0; }
+
+  .settings-panel .field-label { font-size: 12.5px; color: var(--ash); margin: 4px 0 8px; display: flex; align-items: center; }
+  .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field span { font-size: 11.5px; color: var(--ash); }
+  .field-span2 { grid-column: 1 / -1; }
+
+  .input {
+    background: var(--ink);
+    border: 1px solid var(--line);
+    color: var(--paper);
+    border-radius: 9px;
+    padding: 9px 10px;
+    font-size: 14.5px;
+    width: 100%;
+    outline: none;
+  }
+  .input:focus { border-color: var(--copper); }
+  .input::placeholder { color: #5B6472; }
+
+  .gas-toggle {
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: var(--paper);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 13.5px;
+    cursor: pointer;
+  }
+  .gas-toggle-left { display: flex; align-items: center; gap: 7px; }
+  .chevron-open { transform: rotate(180deg); }
+  .gas-note { font-size: 11.5px; color: var(--ash); margin: 2px 0 8px; }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ash); margin-bottom: 10px; }
+
+  .gauge-card { position: relative; display: flex; align-items: center; justify-content: center; margin: 6px 0 16px; }
+  .gauge-svg { width: 168px; height: 168px; transform: rotate(-90deg); }
+  .gauge-track { fill: none; stroke: var(--ink-panel); stroke-width: 10; }
+  .gauge-fill { fill: none; stroke: var(--copper); stroke-width: 10; stroke-linecap: round; transition: stroke-dashoffset 0.4s ease; }
+  .gauge-fill-warn { stroke: var(--warn); }
+  .gauge-center { position: absolute; display: flex; flex-direction: column; align-items: center; }
+  .gauge-label { font-size: 11px; color: var(--ash); }
+  .gauge-value { font-family: 'JetBrains Mono', monospace; font-size: 26px; font-weight: 600; margin-top: 2px; }
+  .gauge-unit { font-size: 11px; color: var(--ash); margin-top: -2px; }
+  .gauge-days { font-size: 11px; color: var(--ash); margin-top: 6px; }
+  .gauge-days-warn { color: var(--warn); font-weight: 600; }
+
+  .entry-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; position: relative; }
+  .input-date { max-width: 160px; }
+  .input-big { font-size: 20px; padding: 12px 12px; }
+  .unit-suffix { position: absolute; right: 12px; color: var(--ash); font-size: 13px; pointer-events: none; }
+  .warn-line { display: flex; align-items: center; gap: 6px; color: var(--warn); font-size: 12px; margin-bottom: 8px; }
+
+  .btn-primary {
+    width: 100%; background: var(--copper); color: #1B1F24; border: none; border-radius: 10px;
+    padding: 12px; font-size: 15px; font-weight: 600; display: flex; align-items: center;
+    justify-content: center; gap: 6px; margin-top: 10px; cursor: pointer;
+  }
+  .btn-primary:disabled { background: var(--ink-panel-2); color: var(--ash); }
+  .btn-primary:active:not(:disabled) { background: var(--copper-dim); }
+
+  .stat-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; font-size: 14px; }
+  .stat-row span:first-child { color: var(--ash); }
+  .stat-row-lg { font-size: 15.5px; font-weight: 600; padding-top: 8px; }
+  .good { color: var(--verdigris); }
+  .warn { color: var(--warn); }
+
+  .chart-bars { display: flex; align-items: flex-end; gap: 6px; height: 130px; padding-top: 6px; }
+  .chart-col { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; }
+  .chart-val { font-size: 10px; color: var(--ash); margin-bottom: 4px; }
+  .chart-bar-track { flex: 1; width: 100%; display: flex; align-items: flex-end; }
+  .chart-bar { width: 100%; border-radius: 4px 4px 0 0; min-height: 3px; transition: height 0.3s ease; }
+  .chart-label { font-size: 10px; color: var(--ash); margin-top: 6px; }
+
+  .empty { color: var(--ash); font-size: 13px; padding: 6px 0; }
+  .history { display: flex; flex-direction: column; }
+  .history-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 0; border-top: 1px solid var(--line); }
+  .history-row:first-child { border-top: none; }
+  .history-date { font-size: 13px; color: var(--ash); }
+  .history-value { font-size: 14.5px; margin-top: 1px; }
+  .history-note { font-size: 11.5px; color: var(--ash); margin-top: 2px; font-style: italic; }
+  .history-right { display: flex; align-items: center; gap: 10px; }
+  .history-delta { font-size: 12.5px; color: var(--copper); }
+
+  .toast {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    background: var(--warn); color: #fff; padding: 8px 14px; border-radius: 8px;
+    font-size: 12.5px; max-width: 90%; z-index: 10;
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo, useCallback, useRef } = React;
+
+// ---- Fülle diese zwei Werte aus Supabase (Project Settings -> API) ----
+const SUPABASE_URL = 'https://quckdqyuybxxdehaetlm.supabase.co/rest/v1/';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF1Y2tkcXl1eWJ4eGRlaGFldGxtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzMzY5MjAsImV4cCI6MjEwMzkxMjkyMH0.jS6jH8lkYfTtGCGMQUWyW9ZI8-fP21iEeLABFe5e4nk';
+// -------------------------------------------------------------------
+
+const CONFIGURED = SUPABASE_URL !== 'YOUR_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY';
+const sb = CONFIGURED ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+async function loadKV(key) {
+  const { data, error } = await sb.from('kv_store').select('value').eq('key', key).maybeSingle();
+  if (error) throw error;
+  return data ? data.value : null;
+}
+async function saveKV(key, value) {
+  const { error } = await sb.from('kv_store').upsert({ key, value, updated_at: new Date().toISOString() });
+  if (error) throw error;
+  return true;
+}
+
+const DEFAULT_SETTINGS = {
+  moveInDate: '2026-09-01',
+  people: ['Max', 'Fabian', 'Jacob'],
+  strom: { anbieter: '', zaehlernummer: '', grundpreis: '', arbeitspreis: '', abschlag: '' },
+  gasTracking: false,
+  gas: { anbieter: '', grundpreis: '', arbeitspreis: '' },
+};
+
+function num(v) {
+  const n = parseFloat(String(v ?? '').replace(',', '.'));
+  return isNaN(n) ? 0 : n;
+}
+function fmtEUR(n) {
+  return (n ?? 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+}
+function fmtKWH(n) {
+  return (n ?? 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fmtDateShort(iso) {
+  if (!iso) return '–';
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+function monthKey(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+function monthLabel(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('de-DE', { month: 'short', year: '2-digit' });
+}
+function daysBetween(a, b) {
+  return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000);
+}
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// ---- handgezeichnete Mini-Icons (kein Icon-Paket nötig) ----
+const IconZap = (p) => <svg viewBox="0 0 24 24" width={p.size||18} height={p.size||18} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>;
+const IconSettings = (p) => <svg viewBox="0 0 24 24" width={p.size||18} height={p.size||18} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2" fill="currentColor" stroke="none"/><line x1="4" y1="13" x2="20" y2="13"/><circle cx="16" cy="13" r="2" fill="currentColor" stroke="none"/><line x1="4" y1="19" x2="20" y2="19"/><circle cx="11" cy="19" r="2" fill="currentColor" stroke="none"/></svg>;
+const IconX = (p) => <svg viewBox="0 0 24 24" width={p.size||16} height={p.size||16} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>;
+const IconPlus = (p) => <svg viewBox="0 0 24 24" width={p.size||16} height={p.size||16} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
+const IconTrash = (p) => <svg viewBox="0 0 24 24" width={p.size||14} height={p.size||14} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>;
+const IconFlame = (p) => <svg viewBox="0 0 24 24" width={p.size||15} height={p.size||15} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 17a2.5 2.5 0 0 0 2.5-2.5c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7.5 7.5 0 1 1-15 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>;
+const IconUsers = (p) => <svg viewBox="0 0 24 24" width={p.size||13} height={p.size||13} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
+const IconChevronDown = (p) => <svg viewBox="0 0 24 24" width={p.size||15} height={p.size||15} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><polyline points="6 9 12 15 18 9"/></svg>;
+const IconAlert = (p) => <svg viewBox="0 0 24 24" width={p.size||13} height={p.size||13} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>;
+
+function MiniBarChart({ data }) {
+  const max = Math.max(...data.map((d) => d.verbrauch), 1);
+  return (
+    <div className="chart-bars">
+      {data.map((d, i) => {
+        const pct = Math.max((d.verbrauch / max) * 100, 4);
+        const isLast = i === data.length - 1;
+        return (
+          <div className="chart-col" key={d.key}>
+            <div className="chart-val mono">{fmtKWH(d.verbrauch)}</div>
+            <div className="chart-bar-track">
+              <div className="chart-bar" style={{ height: `${pct}%`, background: isLast ? 'var(--copper)' : '#5B6472' }} />
+            </div>
+            <div className="chart-label">{d.label}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function Stromprotokoll() {
+  const [loaded, setLoaded] = useState(false);
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [entries, setEntries] = useState([]);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showGasConfig, setShowGasConfig] = useState(false);
+  const [saveError, setSaveError] = useState('');
+
+  const [newDate, setNewDate] = useState(todayISO());
+  const [newValue, setNewValue] = useState('');
+  const [note, setNote] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      let s = DEFAULT_SETTINGS;
+      let e = [];
+      try {
+        const v = await loadKV('settings');
+        if (v) s = { ...DEFAULT_SETTINGS, ...v };
+      } catch (err) { /* noch nichts gespeichert */ }
+      try {
+        const v = await loadKV('entries');
+        if (v) e = v;
+      } catch (err) { /* noch nichts gespeichert */ }
+      setSettings(s);
+      setEntries(e);
+      setLoaded(true);
+    })();
+  }, []);
+
+  const skipNextSave = useRef(true);
+  useEffect(() => {
+    if (!loaded) return;
+    if (skipNextSave.current) { skipNextSave.current = false; return; }
+    const timer = setTimeout(async () => {
+      try {
+        await saveKV('settings', settings);
+        setSaveError('');
+      } catch (err) {
+        setSaveError('Einstellungen konnten nicht gespeichert werden.');
+      }
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [settings, loaded]);
+
+  const persistEntries = useCallback(async (next) => {
+    setEntries(next);
+    try {
+      await saveKV('entries', next);
+      setSaveError('');
+    } catch (err) {
+      setSaveError('Eintrag konnte nicht gespeichert werden.');
+    }
+  }, []);
+
+  const sorted = useMemo(() => [...entries].sort((a, b) => a.date.localeCompare(b.date)), [entries]);
+
+  const intervals = useMemo(() => {
+    const out = [];
+    const arbeitspreisEUR = num(settings.strom.arbeitspreis) / 100;
+    const grundpreisEUR = num(settings.strom.grundpreis);
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1];
+      const cur = sorted[i];
+      const verbrauch = cur.value - prev.value;
+      const days = daysBetween(prev.date, cur.date) || 1;
+      const kosten = verbrauch * arbeitspreisEUR + grundpreisEUR * (days / 30.44);
+      out.push({ date: cur.date, verbrauch, days, kosten });
+    }
+    return out;
+  }, [sorted, settings.strom.arbeitspreis, settings.strom.grundpreis]);
+
+  const lastEntry = sorted[sorted.length - 1];
+  const lastInterval = intervals[intervals.length - 1];
+  const daysSinceLast = lastEntry ? daysBetween(lastEntry.date, todayISO()) : null;
+
+  const monthly = useMemo(() => {
+    const map = new Map();
+    intervals.forEach((iv) => {
+      const key = monthKey(iv.date);
+      const existing = map.get(key) || { key, label: monthLabel(iv.date), verbrauch: 0 };
+      existing.verbrauch += iv.verbrauch;
+      map.set(key, existing);
+    });
+    return [...map.values()].sort((a, b) => a.key.localeCompare(b.key));
+  }, [intervals]);
+
+  const saldo = useMemo(() => {
+    const totalKosten = intervals.reduce((s, iv) => s + iv.kosten, 0);
+    const monthsSince = Math.max(0, (new Date(todayISO()) - new Date(settings.moveInDate)) / (1000 * 60 * 60 * 24 * 30.44));
+    const totalAbschlag = num(settings.strom.abschlag) * monthsSince;
+    return { totalKosten, totalAbschlag, diff: totalAbschlag - totalKosten };
+  }, [intervals, settings.moveInDate, settings.strom.abschlag]);
+
+  const perPerson = settings.people.length || 1;
+  const gaugeProgress = daysSinceLast === null ? 0 : Math.min(daysSinceLast / 30, 1);
+  const gaugeOverdue = daysSinceLast !== null && daysSinceLast > 35;
+
+  function handleAdd() {
+    const val = parseFloat(String(newValue).replace(',', '.'));
+    if (isNaN(val) || !newDate) return;
+    const next = [...entries, { id: Date.now(), date: newDate, value: val, note: note.trim() }];
+    persistEntries(next);
+    setNewValue(''); setNote(''); setNewDate(todayISO());
+  }
+  function handleDelete(id) { persistEntries(entries.filter((e) => e.id !== id)); }
+  function updateStrom(field, val) { setSettings({ ...settings, strom: { ...settings.strom, [field]: val } }); }
+  function updateGas(field, val) { setSettings({ ...settings, gas: { ...settings.gas, [field]: val } }); }
+  function updatePerson(idx, val) { const people = [...settings.people]; people[idx] = val; setSettings({ ...settings, people }); }
+
+  const belowLast = lastEntry && newValue && parseFloat(String(newValue).replace(',', '.')) < lastEntry.value;
+
+  if (!loaded) {
+    return (
+      <div className="app app-center">
+        <div className="loading"><IconZap size={22} /><span>Lade…</span></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="app">
+      <header className="header">
+        <div className="header-top">
+          <div className="header-title"><IconZap size={18} /><span>Stromprotokoll</span></div>
+          <button className="icon-btn" onClick={() => setShowSettings((s) => !s)} aria-label="Einstellungen"><IconSettings size={18} /></button>
+        </div>
+        <div className="header-sub">{settings.people.join(' · ')} — seit {fmtDateShort(settings.moveInDate)}</div>
+      </header>
+
+      {showSettings && (
+        <section className="panel settings-panel">
+          <div className="panel-head"><span>Vertrag &amp; Einstellungen</span>
+            <button className="icon-btn" onClick={() => setShowSettings(false)} aria-label="Schließen"><IconX size={16} /></button>
+          </div>
+
+          <div className="field-label">Strom — eigener Vertrag</div>
+          <div className="field-grid">
+            <label className="field"><span>Anbieter</span>
+              <input className="input" placeholder="noch offen" value={settings.strom.anbieter} onChange={(e) => updateStrom('anbieter', e.target.value)} />
+            </label>
+            <label className="field"><span>Zählernummer</span>
+              <input className="input" placeholder="noch offen" value={settings.strom.zaehlernummer} onChange={(e) => updateStrom('zaehlernummer', e.target.value)} />
+            </label>
+            <label className="field"><span>Grundpreis (€/Monat)</span>
+              <input className="input mono" type="text" inputMode="decimal" placeholder="0,00" value={settings.strom.grundpreis} onChange={(e) => updateStrom('grundpreis', e.target.value)} />
+            </label>
+            <label className="field"><span>Arbeitspreis (ct/kWh)</span>
+              <input className="input mono" type="text" inputMode="decimal" placeholder="0,00" value={settings.strom.arbeitspreis} onChange={(e) => updateStrom('arbeitspreis', e.target.value)} />
+            </label>
+            <label className="field field-span2"><span>Abschlag gesamt (WG) / Monat</span>
+              <input className="input mono" type="text" inputMode="decimal" placeholder="0,00" value={settings.strom.abschlag} onChange={(e) => updateStrom('abschlag', e.target.value)} />
+            </label>
+          </div>
+
+          <div className="divider" />
+
+          <button className="gas-toggle" onClick={() => setShowGasConfig((s) => !s)}>
+            <span className="gas-toggle-left"><IconFlame size={15} />Gas — läuft über die Nebenkosten</span>
+            <IconChevronDown size={15} className={showGasConfig ? 'chevron-open' : ''} />
+          </button>
+          <div className="gas-note">Kein eigener Vertrag nötig, solange das so bleibt.</div>
+          {showGasConfig && (
+            <>
+              <label className="checkbox-row">
+                <input type="checkbox" checked={settings.gasTracking} onChange={(e) => setSettings({ ...settings, gasTracking: e.target.checked })} />
+                <span>Gas separat tracken (falls sich das ändert)</span>
+              </label>
+              {settings.gasTracking && (
+                <div className="field-grid">
+                  <label className="field field-span2"><span>Anbieter</span>
+                    <input className="input" placeholder="noch offen" value={settings.gas.anbieter} onChange={(e) => updateGas('anbieter', e.target.value)} />
+                  </label>
+                  <label className="field"><span>Grundpreis (€/Monat)</span>
+                    <input className="input mono" type="text" inputMode="decimal" placeholder="0,00" value={settings.gas.grundpreis} onChange={(e) => updateGas('grundpreis', e.target.value)} />
+                  </label>
+                  <label className="field"><span>Arbeitspreis (ct/kWh)</span>
+                    <input className="input mono" type="text" inputMode="decimal" placeholder="0,00" value={settings.gas.arbeitspreis} onChange={(e) => updateGas('arbeitspreis', e.target.value)} />
+                  </label>
+                </div>
+              )}
+            </>
+          )}
+
+          <div className="divider" />
+          <div className="field-label"><IconUsers size={13} style={{ marginRight: 6 }} />Mitbewohner</div>
+          <div className="field-grid">
+            {settings.people.map((p, i) => (
+              <label className="field" key={i}><span>Person {i + 1}</span>
+                <input className="input" value={p} onChange={(e) => updatePerson(i, e.target.value)} />
+              </label>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="gauge-card">
+        <svg viewBox="0 0 160 160" className="gauge-svg">
+          <circle cx="80" cy="80" r="68" className="gauge-track" />
+          <circle cx="80" cy="80" r="68" className={gaugeOverdue ? 'gauge-fill gauge-fill-warn' : 'gauge-fill'}
+            strokeDasharray={`${2 * Math.PI * 68}`} strokeDashoffset={`${2 * Math.PI * 68 * (1 - gaugeProgress)}`} />
+        </svg>
+        <div className="gauge-center">
+          <div className="gauge-label">letzter Stand</div>
+          <div className="gauge-value">{lastEntry ? fmtKWH(lastEntry.value) : '–'}</div>
+          <div className="gauge-unit">kWh</div>
+          <div className={gaugeOverdue ? 'gauge-days gauge-days-warn' : 'gauge-days'}>
+            {daysSinceLast === null ? 'noch kein Eintrag' : `vor ${daysSinceLast} Tag${daysSinceLast === 1 ? '' : 'en'}`}
+          </div>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">Neuer Zählerstand</div>
+        <div className="entry-row"><input type="date" className="input input-date" value={newDate} onChange={(e) => setNewDate(e.target.value)} /></div>
+        <div className="entry-row">
+          <input type="text" inputMode="decimal" className="input input-big mono" placeholder="0,00" value={newValue} onChange={(e) => setNewValue(e.target.value)} />
+          <span className="unit-suffix">kWh</span>
+        </div>
+        {belowLast && <div className="warn-line"><IconAlert size={13} />niedriger als letzter Stand ({fmtKWH(lastEntry.value)} kWh)</div>}
+        <input type="text" className="input" placeholder="Notiz (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+        <button className="btn-primary" onClick={handleAdd} disabled={!newValue || !newDate}><IconPlus size={16} />Eintragen</button>
+      </section>
+
+      {lastInterval && (
+        <section className="panel">
+          <div className="panel-head">Letzter Zeitraum · {lastInterval.days} Tage</div>
+          <div className="stat-row"><span>Verbrauch</span><span className="mono">{fmtKWH(lastInterval.verbrauch)} kWh</span></div>
+          <div className="stat-row"><span>Kosten (geschätzt)</span><span className="mono">{fmtEUR(lastInterval.kosten)}</span></div>
+          <div className="stat-row"><span>pro Person</span><span className="mono">{fmtEUR(lastInterval.kosten / perPerson)}</span></div>
+          <div className="divider" />
+          <div className="stat-row"><span>Abschlag bisher (seit Einzug)</span><span className="mono">{fmtEUR(saldo.totalAbschlag)}</span></div>
+          <div className="stat-row"><span>Kosten bisher (seit Einzug)</span><span className="mono">{fmtEUR(saldo.totalKosten)}</span></div>
+          <div className="stat-row stat-row-lg">
+            <span>Saldo</span>
+            <span className={`mono ${saldo.diff >= 0 ? 'good' : 'warn'}`}>
+              {saldo.diff >= 0 ? '+' : ''}{fmtEUR(saldo.diff)} {saldo.diff >= 0 ? '· Guthaben' : '· Nachzahlung'}
+            </span>
+          </div>
+        </section>
+      )}
+
+      {monthly.length > 0 && (
+        <section className="panel">
+          <div className="panel-head">Verbrauch pro Monat</div>
+          <MiniBarChart data={monthly} />
+        </section>
+      )}
+
+      <section className="panel">
+        <div className="panel-head">Verlauf</div>
+        {sorted.length === 0 && <div className="empty">Noch keine Einträge.</div>}
+        <div className="history">
+          {[...sorted].reverse().map((e, idxRev) => {
+            const idx = sorted.length - 1 - idxRev;
+            const prev = sorted[idx - 1];
+            const verbrauch = prev ? e.value - prev.value : null;
+            return (
+              <div className="history-row" key={e.id}>
+                <div className="history-main">
+                  <div className="history-date">{fmtDateShort(e.date)}</div>
+                  <div className="history-value mono">{fmtKWH(e.value)} kWh</div>
+                  {e.note && <div className="history-note">{e.note}</div>}
+                </div>
+                <div className="history-right">
+                  {verbrauch !== null && <div className="history-delta mono">+{fmtKWH(verbrauch)}</div>}
+                  <button className="icon-btn icon-btn-sm" onClick={() => handleDelete(e.id)} aria-label="Löschen"><IconTrash size={14} /></button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {saveError && <div className="toast">{saveError}</div>}
+    </div>
+  );
+}
+
+function Root() {
+  if (!CONFIGURED) {
+    return (
+      <div className="app app-center">
+        <div className="setup-box">
+          <IconZap size={28} />
+          <h1>Noch nicht konfiguriert</h1>
+          <p>
+            Trag im Quelltext (<code>index.html</code>) oben bei <code>SUPABASE_URL</code> und
+            <code> SUPABASE_ANON_KEY</code> die Werte aus deinem Supabase-Projekt ein
+            (Project Settings → API), dann neu laden.
+          </p>
+        </div>
+      </div>
+    );
+  }
+  return <Stromprotokoll />;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<Root />);
+</script>
+</body>
+</html>
