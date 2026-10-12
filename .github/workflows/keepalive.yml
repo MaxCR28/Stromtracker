@@ -1,0 +1,13 @@
+name: keepalive
+on:
+  schedule:
+    - cron: '0 8 */3 * *'
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          curl -sf "https://quckdqyuybxxdehaetlm.supabase.co/rest/v1/kv_store?select=key&limit=1" \
+            -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF1Y2tkcXl1eWJ4eGRlaGFldGxtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzMzY5MjAsImV4cCI6MjEwMzkxMjkyMH0.jS6jH8lkYfTtGCGMQUWyW9ZI8-fP21iEeLABFe5e4nk" \
+            -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF1Y2tkcXl1eWJ4eGRlaGFldGxtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzMzY5MjAsImV4cCI6MjEwMzkxMjkyMH0.jS6jH8lkYfTtGCGMQUWyW9ZI8-fP21iEeLABFe5e4nk"
