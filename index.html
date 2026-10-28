@@ -6,6 +6,7 @@
 <title>Stromprotokoll</title>
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%231B1F24'/%3E%3Cpolygon points='55,15 25,55 48,55 42,85 75,42 52,42' fill='%23C97C3D'/%3E%3C/svg%3E" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="theme-color" content="#1B1F24" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -13,7 +14,8 @@
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
   :root {
     --ink: #1B1F24;
@@ -179,25 +181,33 @@
 <script type="text/babel">
 const { useState, useEffect, useMemo, useCallback, useRef } = React;
 
-// ---- Fülle diese zwei Werte aus Supabase (Project Settings -> API) ----
-const SUPABASE_URL = 'https://quckdqyuybxxdehaetlm.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF1Y2tkcXl1eWJ4eGRlaGFldGxtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzMzY5MjAsImV4cCI6MjEwMzkxMjkyMH0.jS6jH8lkYfTtGCGMQUWyW9ZI8-fP21iEeLABFe5e4nk';
-// -------------------------------------------------------------------
+// ---- Fülle diese zwei Werte aus der Firebase-Konsole ----
+// Projekteinstellungen -> Allgemein -> Deine Apps -> Web-App -> firebaseConfig
+const FIREBASE_CONFIG = {
+  apiKey: 'AIzaSyDTLHV1tUqtgu66ilKgzV4p1BgzCrrWK20',
+  projectId: 'stromprotokoll',
+};
+// ----------------------------------------------------------
 
-const CONFIGURED = SUPABASE_URL !== 'YOUR_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY';
-const sb = CONFIGURED ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+const CONFIGURED = FIREBASE_CONFIG.apiKey !== 'YOUR_API_KEY' && FIREBASE_CONFIG.projectId !== 'YOUR_PROJECT_ID';
+let db = null;
+if (CONFIGURED) {
+  firebase.initializeApp(FIREBASE_CONFIG);
+  db = firebase.firestore();
+  db.settings({ experimentalAutoDetectLongPolling: true });
+}
 
+// Werte liegen als JSON-String in /kv/<key>, damit Firestore-Typregeln nie stören.
 async function loadKV(key) {
-  const { data, error } = await sb.from('kv_store').select('value').eq('key', key).maybeSingle();
-  if (error) throw error;
-  return data ? data.value : null;
+  const snap = await db.collection('kv').doc(key).get({ source: 'server' });
+  if (!snap.exists) return null;
+  return JSON.parse(snap.data().json);
 }
 async function saveKV(key, value) {
-  const { error } = await sb.from('kv_store').upsert(
-    { key, value, updated_at: new Date().toISOString() },
-    { onConflict: 'key' }
-  );
-  if (error) throw error;
+  await db.collection('kv').doc(key).set({
+    json: JSON.stringify(value),
+    updated: new Date().toISOString(),
+  });
   return true;
 }
 
@@ -284,6 +294,11 @@ function Stromprotokoll() {
   const [newValue, setNewValue] = useState('');
   const [note, setNote] = useState('');
 
+  // Schlägt das Laden fehl, wird Speichern gesperrt. Sonst würde ein Eintrag
+  // auf Basis einer leeren Liste die komplette Historie überschreiben.
+  const loadFailedRef = useRef(false);
+  const LOCKED_MSG = 'Laden fehlgeschlagen — Speichern ist gesperrt, bitte neu laden.';
+
   useEffect(() => {
     (async () => {
       let s = DEFAULT_SETTINGS;
@@ -292,15 +307,17 @@ function Stromprotokoll() {
         const v = await loadKV('settings');
         if (v) s = { ...DEFAULT_SETTINGS, ...v };
       } catch (err) {
-        console.error('Supabase Ladefehler (settings):', err);
-        setSaveError('Laden fehlgeschlagen (settings) — Details in der Browser-Konsole.');
+        loadFailedRef.current = true;
+        console.error('Firestore Ladefehler (settings):', err);
+        setSaveError(LOCKED_MSG);
       }
       try {
         const v = await loadKV('entries');
         if (v) e = v;
       } catch (err) {
-        console.error('Supabase Ladefehler (entries):', err);
-        setSaveError('Laden fehlgeschlagen (entries) — Details in der Browser-Konsole.');
+        loadFailedRef.current = true;
+        console.error('Firestore Ladefehler (entries):', err);
+        setSaveError(LOCKED_MSG);
       }
       setSettings(s);
       setEntries(e);
@@ -312,25 +329,31 @@ function Stromprotokoll() {
   useEffect(() => {
     if (!loaded) return;
     if (skipNextSave.current) { skipNextSave.current = false; return; }
+    if (loadFailedRef.current) { setSaveError(LOCKED_MSG); return; }
     const timer = setTimeout(async () => {
       try {
         await saveKV('settings', settings);
         setSaveError('');
       } catch (err) {
-        console.error('Supabase Speicherfehler (settings):', err);
+        console.error('Firestore Speicherfehler (settings):', err);
         setSaveError('Einstellungen konnten nicht gespeichert werden — Details in der Browser-Konsole.');
       }
     }, 700);
     return () => clearTimeout(timer);
   }, [settings, loaded]);
 
-  const persistEntries = useCallback(async (next) => {
-    setEntries(next);
+  // Liest vor jedem Schreiben den aktuellen Serverstand und wendet die Änderung darauf an,
+  // damit zwei Mitbewohner mit veraltetem Bildschirm sich nicht gegenseitig Einträge löschen.
+  const mutateEntries = useCallback(async (fn) => {
+    if (loadFailedRef.current) { setSaveError(LOCKED_MSG); return; }
     try {
+      const latest = (await loadKV('entries')) || [];
+      const next = fn(latest);
+      setEntries(next);
       await saveKV('entries', next);
       setSaveError('');
     } catch (err) {
-      console.error('Supabase Speicherfehler (entries):', err);
+      console.error('Firestore Speicherfehler (entries):', err);
       setSaveError('Eintrag konnte nicht gespeichert werden — Details in der Browser-Konsole.');
     }
   }, []);
@@ -381,11 +404,11 @@ function Stromprotokoll() {
   function handleAdd() {
     const val = parseFloat(String(newValue).replace(',', '.'));
     if (isNaN(val) || !newDate) return;
-    const next = [...entries, { id: Date.now(), date: newDate, value: val, note: note.trim() }];
-    persistEntries(next);
+    const entry = { id: Date.now(), date: newDate, value: val, note: note.trim() };
+    mutateEntries((list) => [...list.filter((x) => x.id !== entry.id), entry]);
     setNewValue(''); setNote(''); setNewDate(todayISO());
   }
-  function handleDelete(id) { persistEntries(entries.filter((e) => e.id !== id)); }
+  function handleDelete(id) { mutateEntries((list) => list.filter((x) => x.id !== id)); }
   function updateStrom(field, val) { setSettings({ ...settings, strom: { ...settings.strom, [field]: val } }); }
   function updateGas(field, val) { setSettings({ ...settings, gas: { ...settings.gas, [field]: val } }); }
   function updatePerson(idx, val) { const people = [...settings.people]; people[idx] = val; setSettings({ ...settings, people }); }
@@ -567,9 +590,9 @@ function Root() {
           <IconZap size={28} />
           <h1>Noch nicht konfiguriert</h1>
           <p>
-            Trag im Quelltext (<code>index.html</code>) oben bei <code>SUPABASE_URL</code> und
-            <code> SUPABASE_ANON_KEY</code> die Werte aus deinem Supabase-Projekt ein
-            (Project Settings → API), dann neu laden.
+            Trag im Quelltext (<code>index.html</code>) oben bei <code>apiKey</code> und
+            <code> projectId</code> die Werte aus deinem Firebase-Projekt ein
+            (Projekteinstellungen → Allgemein → Web-App), dann neu laden.
           </p>
         </div>
       </div>
